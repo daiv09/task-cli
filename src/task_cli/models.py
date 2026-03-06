@@ -2,7 +2,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
-import uuid
+import random
+import string
+
+def generate_task_id():
+    letter = random.choice(string.ascii_lowercase)
+    numbers = random.randint(0, 99)
+    return f"{letter}{numbers:02d}"   # ensures two digits like 01, 09
 
 class TaskStatus(str, Enum):
     DO = "do"
@@ -16,7 +22,7 @@ class Priority(str, Enum):
 
 @dataclass
 class Task:
-    id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
+    id: str = field(default_factory=generate_task_id)
     description: str = ""
     status: TaskStatus = TaskStatus.DO
     priority: Priority = Priority.LOW
@@ -25,6 +31,9 @@ class Task:
     due: Optional[str] = None
     recur: Optional[str] = None
     wait: Optional[str] = None
+    subtasks: List[str] = field(default_factory=list)
+    start_time: Optional[str] = None
+    total_duration: int = 0
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -39,10 +48,13 @@ class Task:
             "due": self.due,
             "recur": self.recur,
             "wait": self.wait,
+            "subtasks": self.subtasks,
+            "start_time": self.start_time,
+            "total_duration": self.total_duration,
             "created_at": self.created_at,
             "updated_at": self.updated_at
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> "Task":
         return cls(
@@ -55,6 +67,9 @@ class Task:
             due=data.get("due"),
             recur=data.get("recur"),
             wait=data.get("wait"),
+            subtasks=data.get("subtasks", []),
+            start_time=data.get("start_time"),
+            total_duration=data.get("total_duration", 0),
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at")
         )

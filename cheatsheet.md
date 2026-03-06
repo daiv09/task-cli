@@ -14,6 +14,15 @@ t a "Fix login +backend +bug" -p high --project core
 # With scheduling (Due dates and Recurrence)
 t a "Pay rent" --due 2026-04-01 --recur monthly
 t a "Renew domain" --wait 2026-06-01  # Hides task until date
+
+# Quick add (instant high-priority task)
+t quick "Server is down"
+
+# Create task from clipboard text
+t clip
+
+# Add a subtask to an existing task
+t sub <id> "Write tests"
 ```
 
 ## 📋 Listing & Filtering (List / `ls`)
@@ -37,6 +46,9 @@ t ls --sort priority  # Or: due, created
 # Overdue & Hidden
 t ls --overdue   # Tasks past their due date
 t ls --all       # Includes tasks hidden by `--wait`
+
+# Search by keyword
+t search "database"
 ```
 
 ## 🎯 Focus & Productivity Views
@@ -53,6 +65,20 @@ t focus
 # Lock your CLI context to a specific tag (affects all future `ls` commands)
 t context work
 t context none   # Clears context
+
+# Display high-level dashboard
+t dashboard
+```
+
+## ⏱️ Time Tracking
+```bash
+# Start tracking time for a task (or create & start)
+t start <id>
+t start "New task description"
+
+# Stop time tracking
+t stop
+t stop <id>
 ```
 
 ## 🔄 Manipulating Tasks
@@ -65,8 +91,18 @@ t mark-do <id>
 # Modify Description (re-extracts tags)
 t update <id> "New description +newtag"
 
-# Delete
+# Delete or Clear
 t delete <id>
+t clear           # Deletes ALL tasks
+
+# Undo last destructive operation
+t undo
+```
+
+## 🖥️ Interactive Mode
+```bash
+# Start interactive task shell
+t shell
 ```
 
 ## 📊 Data, Config & Sync
@@ -74,10 +110,13 @@ t delete <id>
 # View summary statistics
 t stats
 
+# Archive completed tasks
+t archive
+
 # Export & Import
 t export backup.json
 t export backup.md --format md
-t import backup.json
+t import-tasks backup.json
 ```
 
 **Configuration Path**: `~/.task-cli.toml`
