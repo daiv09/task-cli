@@ -105,6 +105,32 @@ t undo
 t shell
 ```
 
+## 🤖 AI Assistant (`tai` & `t run`)
+```bash
+# Break down an existing task into 3-5 subtasks using AI
+tai sub <id>
+
+# Scan current git repository status and diffs, and suggest tasks
+tai scan
+
+# Update or generate project README.md using AI
+tai readme
+
+# Generate changelog / release notes for tasks completed in the last N days
+tai changelog --days 7
+
+# Run terminal command and auto-log a high-priority bug (+bug) on failure
+t run "<command>"
+```
+
+## ⌨️ Shell Autocomplete Setup
+To install auto-completion configuration for your shell (Bash, Zsh, Fish, or PowerShell):
+```bash
+t --install-completion
+task --install-completion
+```
+*Note: Restart your terminal session after running this command to enable TAB-completion of task IDs.*
+
 ## 📊 Data, Config & Sync
 ```bash
 # View summary statistics

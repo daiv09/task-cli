@@ -1,9 +1,16 @@
 from typing import List, Optional
 from datetime import datetime
-from .models import Task, TaskStatus, Priority
+from .models import Task, TaskStatus, Priority, generate_task_id
 from .repository import TaskRepository
 from .utils import extract_tags, calculate_next_recurrence
 from .nlp_dates import parse_natural_date
+
+def generate_unique_id(existing_tasks: List[Task]) -> str:
+    existing_ids = {t.id for t in existing_tasks}
+    new_id = generate_task_id()
+    while new_id in existing_ids:
+        new_id = generate_task_id()
+    return new_id
 
 class TaskService:
     def __init__(self, repository: TaskRepository = None):
@@ -30,6 +37,7 @@ class TaskService:
         clean_desc, desc_tags = extract_tags(description)
 
         new_task = Task(
+            id=generate_unique_id(tasks),
             description=clean_desc,
             priority=priority,
             tags=desc_tags,
@@ -145,6 +153,7 @@ class TaskService:
             # Create and start new task
             clean_desc, desc_tags = extract_tags(description)
             target_task = Task(
+                id=generate_unique_id(tasks),
                 description=clean_desc,
                 priority=Priority.MED,
                 status=TaskStatus.DOING,
@@ -245,6 +254,7 @@ class TaskService:
                         next_due = calculate_next_recurrence(task.due or task.updated_at, task.recur)
                         if next_due:
                             new_task = Task(
+                                id=generate_unique_id(tasks),
                                 description=task.description,
                                 priority=task.priority,
                                 tags=task.tags,

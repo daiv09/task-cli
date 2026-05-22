@@ -14,12 +14,15 @@ dependencies = [
     "typer[all]>=0.9.0",
     "rich>=13.0.0",
     "tomli>=2.0.1; python_version < '3.11'",
-    "pyperclip>=1.8.2"
+    "pyperclip>=1.8.2",
+    "httpx>=0.24.0",
+    "python-dotenv>=1.0.0"
 ]
 
 [project.scripts]
 task = "task_cli.main:app"
 t = "task_cli.main:app"
+tai = "task_cli.main:ai_app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/task_cli"]

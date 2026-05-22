@@ -4,20 +4,51 @@ from rich.table import Table
 from typing import Optional, List
 from datetime import datetime
 from pathlib import Path
+import sys
 
 from .models import TaskStatus, Priority, Task
 from .service import TaskService
 from .config import VERSION, settings
 from .utils import parse_date
 from .clipboard import get_clipboard_text
+from .ai_client import query_llm
 import shlex
 import pyperclip # verify presence for error handling in clip command
+import json
+import subprocess
+import difflib
 
 app = typer.Typer(help="Advanced CLI Task Manager", context_settings={"help_option_names": ["-h", "--help"]})
+ai_app = typer.Typer(help="Agentic & AI-powered Task CLI extensions", context_settings={"help_option_names": ["-h", "--help"]})
+app.add_typer(ai_app, name="ai")
 console = Console()
 err_console = Console(stderr=True)
 service = TaskService()
 
+def safe_char(char: str, fallback: str) -> str:
+    try:
+        char.encode(sys.stdout.encoding or "ascii")
+        return char
+    except Exception:
+        return fallback
+
+TICK = safe_char("✔", "v")
+WARN = safe_char("⚠️", "!")
+CROSS = safe_char("❌", "x")
+BRANCH = safe_char("┗", " -")
+
+
+def complete_task_id(ctx=None, args=None, incomplete: str = "") -> List[str]:
+    incomplete_str = ""
+    for val in (incomplete, args, ctx):
+        if isinstance(val, str) and val:
+            incomplete_str = val
+            break
+    try:
+        tasks = service.list_tasks(include_waiting=True)
+        return [t.id for t in tasks if t.id.startswith(incomplete_str)]
+    except Exception:
+        return []
 
 def format_date(iso_date: str) -> str:
     if not iso_date:
@@ -152,7 +183,7 @@ def add_task(
         recur=recur,
         wait=wait_iso
     )
-    console.print(f"[green]✔ Created[/green] task [bold]{task.id}[/bold]")
+    console.print(f"[green]{TICK} Created[/green] task [bold]{task.id}[/bold]")
 
 @app.command(name="a", hidden=True)
 def add_alias(
@@ -204,6 +235,17 @@ def list_tasks(
         after=after_iso,
         include_waiting=all
     )
+
+    # Apply smart auto-context if no explicit tag/project filtering is specified
+    if settings.auto_context and not tag and not project:
+        filtered_tasks = []
+        for t in tasks:
+            if t.project == settings.auto_context or settings.auto_context in t.tags:
+                filtered_tasks.append(t)
+            elif not t.project and not t.tags:
+                filtered_tasks.append(t)
+        tasks = filtered_tasks
+
     print_tasks(tasks)
 
 @app.command(name="ls", hidden=True)
@@ -223,7 +265,7 @@ def list_alias(
 
 @app.command()
 def update(
-    task_id: str, 
+    task_id: str = typer.Argument(..., autocompletion=complete_task_id, help="Task ID or prefix"), 
     new_description: Optional[str] = typer.Argument(
         None, 
         help="The new description for the task (Optional)"
@@ -302,22 +344,22 @@ def _mark_task(task_id: str, status: TaskStatus):
 
 
 @app.command()
-def mark_doing(task_id: str):
+def mark_doing(task_id: str = typer.Argument(..., autocompletion=complete_task_id, help="Task ID or prefix")):
     """Change status to doing"""
     _mark_task(task_id, TaskStatus.DOING)
 
 @app.command()
-def mark_done(task_id: str):
+def mark_done(task_id: str = typer.Argument(..., autocompletion=complete_task_id, help="Task ID or prefix")):
     """Change status to done"""
     _mark_task(task_id, TaskStatus.DONE)
 
 @app.command()
-def mark_do(task_id: str):
+def mark_do(task_id: str = typer.Argument(..., autocompletion=complete_task_id, help="Task ID or prefix")):
     """Change status to do"""
     _mark_task(task_id, TaskStatus.DO)
 
 @app.command()
-def delete(task_id: str):
+def delete(task_id: str = typer.Argument(..., autocompletion=complete_task_id, help="Task ID or prefix")):
     """Delete a task"""
     task_id = resolve_id(task_id)
     success = service.delete_task(task_id)
@@ -328,7 +370,7 @@ def delete(task_id: str):
         raise typer.Exit(code=1)
 
 @app.command()
-def done(task_id: str):
+def done(task_id: str = typer.Argument(..., autocompletion=complete_task_id, help="Task ID or prefix")):
     """Mark a task as done"""
     task_id = resolve_id(task_id)
     task = service.update_task_status(task_id, TaskStatus.DONE)
@@ -481,7 +523,10 @@ def clip():
     console.print(f"[green]✔ Created task from clipboard:[/green] [bold]{task.id}[/bold]")
 
 @app.command()
-def sub(task_id: str, description: str):
+def sub(
+    task_id: str = typer.Argument(..., autocompletion=complete_task_id, help="Task ID or prefix"), 
+    description: str = typer.Argument(..., help="The description of the subtask")
+):
     """Add a subtask to an existing task."""
     task_id = resolve_id(task_id)
     service.repository.save_backup()
@@ -493,7 +538,7 @@ def sub(task_id: str, description: str):
         raise typer.Exit(code=1)
 
 @app.command()
-def start(task_ref: str = typer.Argument(..., help="Task ID or new task description")):
+def start(task_ref: str = typer.Argument(..., autocompletion=complete_task_id, help="Task ID or new task description")):
     """Start tracking time for a task. Creates a new task if description is provided."""
 
     tasks = service.list_tasks(include_waiting=True)
@@ -530,7 +575,7 @@ def start(task_ref: str = typer.Argument(..., help="Task ID or new task descript
         )
 
 @app.command()
-def stop(task_id: Optional[str] = typer.Argument(None, help="Task ID (optional)")):
+def stop(task_id: Optional[str] = typer.Argument(None, autocompletion=complete_task_id, help="Task ID (optional)")):
     """Stop time tracking."""
 
     task = service.stop_time_tracking(task_id)
@@ -607,13 +652,10 @@ def shell():
             cmd_args = shlex.split(line)
             # Invoke typer app
             try:
-                # We need to call the app with the specific arguments
-                # Since Typer doesn't have a direct 'invoke' that takes a list easily without re-parsing
-                # We can use the main app's internal behavior or just wrap it.
-                # A simple way for a basic REPL:
-                import subprocess
-                # Run the actual 't' command
-                subprocess.run(["t"] + cmd_args)
+                # Invoke Typer in-memory
+                app(args=cmd_args)
+            except SystemExit:
+                pass
             except Exception as e:
                 console.print(f"[red]Error executing command:[/red] {e}")
         except EOFError:
@@ -621,6 +663,301 @@ def shell():
         except KeyboardInterrupt:
             console.print("\n[yellow]Use 'exit' to quit.[/yellow]")
 
+
+def get_git_repo_name() -> Optional[str]:
+    try:
+        res = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            check=True
+        )
+        path = Path(res.stdout.strip())
+        return path.name.lower()
+    except Exception:
+        return None
+
+def scan_project_files() -> str:
+    try:
+        summary_lines = []
+        for p in Path(".").glob("*"):
+            if p.is_dir() and p.name not in [".git", "node_modules", "venv", "env", "__pycache__", "build", "dist"]:
+                summary_lines.append(f"Directory: {p.name}/")
+                for sub_p in p.glob("*"):
+                    if sub_p.is_file():
+                        summary_lines.append(f"  - {sub_p.name}")
+            elif p.is_file():
+                summary_lines.append(f"File: {p.name}")
+        config_files = ["pyproject.toml", "package.json", "go.mod", "Cargo.toml", "requirements.txt"]
+        for cf in config_files:
+            cf_path = Path(cf)
+            if cf_path.exists():
+                summary_lines.append(f"\n--- Content of {cf} (first 20 lines) ---")
+                try:
+                    lines = cf_path.read_text().splitlines()[:20]
+                    summary_lines.extend(lines)
+                except Exception:
+                    pass
+        return "\n".join(summary_lines)
+    except Exception as e:
+        return f"Error scanning files: {e}"
+
+def show_unified_diff(old_text: str, new_text: str, filename: str = "README.md") -> bool:
+    diff = list(difflib.unified_diff(
+        old_text.splitlines(keepends=True),
+        new_text.splitlines(keepends=True),
+        fromfile=f"a/{filename}",
+        tofile=f"b/{filename}"
+    ))
+    if not diff:
+        console.print("[yellow]No updates proposed by AI.[/yellow]")
+        return False
+    diff_text = "".join(diff)
+    from rich.syntax import Syntax
+    syntax = Syntax(diff_text, "diff", theme="monokai", line_numbers=True)
+    console.print(syntax)
+    return True
+
+@ai_app.command(name="sub")
+def ai_subtasks(task_id: str = typer.Argument(..., autocompletion=complete_task_id, help="ID of the task to generate subtasks for")):
+    """Use AI to generate subtasks and attach them to a task"""
+    task_id = resolve_id(task_id)
+    task = service.get_task(task_id)
+    if not task:
+        err_console.print(f"[red]Error: Task {task_id} not found.[/red]")
+        raise typer.Exit(code=1)
+    if not task.description:
+        err_console.print("[red]Error: Task description is empty.[/red]")
+        raise typer.Exit(code=1)
+    sys_prompt = "You are a software engineering assistant. Break down the user's task into 3-5 logical, actionable developer subtasks. Return ONLY a JSON object containing a 'subtasks' key with a list of strings."
+    user_prompt = f"Task Description: {task.description}"
+    try:
+        with console.status("[bold green]Generating subtasks using AI..."):
+            res = query_llm(sys_prompt, user_prompt, json_format=True)
+            data = json.loads(res.strip())
+            subtasks = data.get("subtasks", [])
+        if not subtasks:
+            console.print("[yellow]No subtasks returned by AI.[/yellow]")
+            return
+        service.repository.save_backup()
+        for sub_desc in subtasks:
+            service.add_subtask(task_id, sub_desc)
+        console.print(f"[green]{TICK} Added {len(subtasks)} subtasks to task {task_id[:8]}:[/green]")
+        for sub_desc in subtasks:
+            console.print(f"  {BRANCH} [cyan]{sub_desc}[/cyan]")
+    except Exception as e:
+        console.print(f"[red]Failed to generate subtasks: {e}[/red]")
+
+@ai_app.command(name="scan")
+def git_workspace_scan():
+    """Scan git repository changes and use AI to suggest new tasks"""
+    repo_name = get_git_repo_name()
+    if not repo_name:
+        err_console.print("[red]Error: Current directory is not a Git repository.[/red]")
+        raise typer.Exit(code=1)
+    try:
+        diff_res = subprocess.run(["git", "diff"], capture_output=True, text=True, errors="replace", check=True)
+        status_res = subprocess.run(["git", "status", "-s"], capture_output=True, text=True, errors="replace", check=True)
+    except Exception as e:
+        err_console.print(f"[red]Error running git commands: {e}[/red]")
+        raise typer.Exit(code=1)
+    diff_text = diff_res.stdout.strip()
+    status_text = status_res.stdout.strip()
+    if not diff_text and not status_text:
+        console.print(f"[green]{TICK} No uncommitted changes or untracked files in Git workspace.[/green]")
+        return
+    if len(diff_text) > 4000:
+        diff_text = diff_text[:4000] + "\n[Diff truncated...]"
+    sys_prompt = (
+        "You are an expert developer assistant. Analyze the following Git diff and status of uncommitted changes. "
+        "Identify missing work, missing tests, refactoring items, or todo comments that should be created as tasks. "
+        "Return ONLY a JSON object with key 'tasks' containing a list of objects. "
+        "Each task object must have: 'description' (string, max 80 chars), 'priority' ('low', 'med', or 'high'), "
+        "and 'project' (string representing the project name, or null)."
+    )
+    user_prompt = f"Git Status:\n{status_text}\n\nGit Diff:\n{diff_text}"
+    try:
+        with console.status("[bold green]Analyzing workspace changes with AI..."):
+            res = query_llm(sys_prompt, user_prompt, json_format=True)
+            data = json.loads(res.strip())
+            tasks_list = data.get("tasks", [])
+        if not tasks_list:
+            console.print("[green]AI analyzed changes and found no suggestions.[/green]")
+            return
+        console.print(f"\n[bold cyan]AI suggested {len(tasks_list)} tasks to add:[/bold cyan]\n")
+        service.repository.save_backup()
+        added_count = 0
+        from rich.prompt import Confirm
+        for t_info in tasks_list:
+            desc = t_info.get("description", "")
+            pri_str = t_info.get("priority", "low")
+            proj = t_info.get("project") or repo_name
+            from .models import Priority
+            try:
+                pri = Priority(pri_str.lower())
+            except ValueError:
+                pri = Priority.LOW
+            confirm = Confirm.ask(f"Add task: [bold]{desc}[/bold] (Priority: [yellow]{pri.value}[/yellow], Project: [blue]{proj}[/blue])?")
+            if confirm:
+                service.add_task(description=desc, priority=pri, project=proj)
+                console.print(f"[green]{TICK} Added.[/green]")
+                added_count += 1
+            else:
+                console.print("[yellow]Skipped.[/yellow]")
+        console.print(f"\n[green]{TICK} Successfully added {added_count} tasks to your backlog.[/green]")
+    except Exception as e:
+        console.print(f"[red]Failed to run workspace scan: {e}[/red]")
+
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def run(ctx: typer.Context, command: List[str] = typer.Argument(..., help="Terminal command to execute")):
+    """Execute a terminal command. If it fails, use AI to log a bug-fix task."""
+    cmd_str = " ".join(command)
+    console.print(f"[dim]Running command: {cmd_str}[/dim]\n")
+    try:
+        result = subprocess.run(cmd_str, shell=True, capture_output=True, text=True, errors="replace")
+    except Exception as e:
+        err_console.print(f"[red]Failed to start subprocess: {e}[/red]")
+        raise typer.Exit(code=1)
+    if result.stdout:
+        console.print(result.stdout)
+    if result.stderr:
+        err_console.print(result.stderr)
+    if result.returncode == 0:
+        raise typer.Exit(code=0)
+    console.print(f"\n[bold red]Command failed with exit code {result.returncode}.[/bold red]")
+    stderr_content = result.stderr.strip()
+    if not stderr_content:
+        stderr_content = result.stdout.strip()
+    if not stderr_content:
+        stderr_content = "No error output captured."
+    if len(stderr_content) > 3000:
+        stderr_content = stderr_content[:3000] + "\n[Error log truncated...]"
+    sys_prompt = (
+        "You are an expert debugging assistant. Review the following failed command and its error logs. "
+        "Generate a single, concise bug-fix task description (max 80 chars) to resolve this error. "
+        "Return ONLY a JSON object with key 'bug_task' containing the description."
+    )
+    user_prompt = f"Command: {cmd_str}\nExit Code: {result.returncode}\nError Logs:\n{stderr_content}"
+    try:
+        with console.status("[bold green]Analyzing failure logs with AI..."):
+            res = query_llm(sys_prompt, user_prompt, json_format=True)
+            data = json.loads(res.strip())
+            bug_desc = data.get("bug_task", f"Fix failure in: {cmd_str}")
+        if "+bug" not in bug_desc:
+            bug_desc = f"{bug_desc} +bug"
+        proj = get_git_repo_name() or "terminal"
+        service.repository.save_backup()
+        from .models import Priority
+        task = service.add_task(description=bug_desc, priority=Priority.HIGH, project=proj)
+        console.print(f"[green]{TICK} Added high-priority bug task to backlog:[/green] [bold]{task.description}[/bold] (ID: {task.id})")
+        raise typer.Exit(code=result.returncode)
+    except Exception as e:
+        console.print(f"[red]Failed to log bug-fix task: {e}[/red]")
+        raise typer.Exit(code=result.returncode)
+
+@ai_app.command(name="readme")
+def ai_readme():
+    """Generate or propose updates to README.md using AI"""
+    readme_path = Path("README.md")
+    workspace_summary = scan_project_files()
+    if not readme_path.exists():
+        console.print("[yellow]README.md not found. Generating a new one...[/yellow]")
+        sys_prompt = (
+            "You are an expert technical writer. Based on the project structure and config files provided, "
+            "generate a professional, high-quality, comprehensive README.md in Markdown. "
+            "Include sections: Title, Description, Installation, Usage, and Architecture."
+        )
+        user_prompt = f"Workspace details:\n{workspace_summary}"
+        try:
+            with console.status("[bold green]Generating README.md using AI..."):
+                generated_md = query_llm(sys_prompt, user_prompt)
+            readme_path.write_text(generated_md.strip())
+            console.print(f"[green]{TICK} README.md successfully created.[/green]")
+        except Exception as e:
+            console.print(f"[red]Failed to generate README.md: {e}[/red]")
+    else:
+        console.print("[cyan]README.md exists. Analyzing recently completed tasks to propose updates...[/cyan]")
+        tasks = service.list_tasks(status=TaskStatus.DONE, include_waiting=True)
+        if tasks:
+            done_tasks_str = "\n".join(f"- {t.description} (Project: {t.project or 'None'}, Completed: {t.updated_at[:10]})" for t in tasks)
+        else:
+            done_tasks_str = "No tasks have been completed recently."
+        sys_prompt = (
+            "You are an expert technical writer. You will review an existing README.md, a list of recently "
+            "completed project tasks, and the project workspace files. Propose updates to the README.md to "
+            "reflect any new features, changes, or setup procedures implemented in those tasks. "
+            "Return the complete updated README.md content. Do not write explanations outside the Markdown block."
+        )
+        old_readme = readme_path.read_text()
+        user_prompt = (
+            f"Existing README.md:\n{old_readme}\n\n"
+            f"Recently Completed Tasks:\n{done_tasks_str}\n\n"
+            f"Workspace summary:\n{workspace_summary}"
+        )
+        try:
+            with console.status("[bold green]Analyzing & preparing updates to README.md..."):
+                new_readme = query_llm(sys_prompt, user_prompt).strip()
+            if new_readme.startswith("```markdown"):
+                new_readme = new_readme[11:].lstrip()
+            elif new_readme.startswith("```"):
+                new_readme = new_readme[3:].lstrip()
+            if new_readme.endswith("```"):
+                new_readme = new_readme[:-3].rstrip()
+            if old_readme.strip() == new_readme.strip():
+                console.print(f"[green]{TICK} README.md is already up to date.[/green]")
+                return
+            console.print("\n[bold cyan]Proposed changes to README.md:[/bold cyan]\n")
+            has_diff = show_unified_diff(old_readme, new_readme, "README.md")
+            if has_diff:
+                from rich.prompt import Confirm
+                confirm = Confirm.ask("Apply these updates to README.md?")
+                if confirm:
+                    readme_path.write_text(new_readme)
+                    console.print(f"[green]{TICK} README.md updated.[/green]")
+                else:
+                    console.print("[yellow]Cancelled.[/yellow]")
+        except Exception as e:
+            console.print(f"[red]Failed to update README.md: {e}[/red]")
+
+@ai_app.command(name="changelog")
+def ai_changelog(
+    days: int = typer.Option(7, "--days", "-d", help="Generate changelog for tasks completed in the last N days")
+):
+    """Generate a Pull Request description or Release Changelog using AI and copy to clipboard"""
+    tasks = service.list_tasks(status=TaskStatus.DONE, include_waiting=True)
+    now = datetime.now()
+    recent_tasks = []
+    for t in tasks:
+        try:
+            completed_dt = datetime.fromisoformat(t.updated_at)
+            if (now - completed_dt).days <= days:
+                recent_tasks.append(t)
+        except Exception:
+            recent_tasks.append(t)
+    if not recent_tasks:
+        console.print(f"[yellow]No tasks completed in the last {days} days.[/yellow]")
+        return
+    tasks_details = "\n".join(
+        f"- {t.description} (Project: {t.project or 'None'}, Priority: {t.priority.value}, ID: {t.id})"
+        for t in recent_tasks
+    )
+    sys_prompt = (
+        "You are an expert developer assistant. Synthesize a professional, highly readable Markdown-formatted "
+        "Pull Request description or Release Notes document summarizing the changes from the provided list of completed tasks. "
+        "Group them logically (e.g. Features, Bug Fixes, Refactoring). Write a concise, clear description for each section."
+    )
+    user_prompt = f"Completed tasks in the last {days} days:\n{tasks_details}"
+    try:
+        with console.status("[bold green]Synthesizing changelog using AI..."):
+            changelog_text = query_llm(sys_prompt, user_prompt).strip()
+        console.print("\n[bold cyan]Generated Release Notes / PR Description:[/bold cyan]\n")
+        console.print(changelog_text)
+        console.print()
+        pyperclip.copy(changelog_text)
+        console.print(f"[green]{TICK} Changelog copied to clipboard successfully![/green]")
+    except Exception as e:
+        console.print(f"[red]Failed to generate changelog: {e}[/red]")
 
 def version_callback(value: bool):
     if value:
@@ -640,6 +977,33 @@ def main(
     ctx_path = Path.home() / ".task-cli.context"
     if ctx_path.exists():
         settings.context = ctx_path.read_text().strip()
+
+    # Smart Auto-Contexting
+    git_repo = get_git_repo_name()
+    if git_repo:
+        settings.auto_context = git_repo
+    else:
+        try:
+            extensions = {}
+            for p in Path(".").glob("*"):
+                if p.is_file():
+                    ext = p.suffix.lower()
+                    if ext in [".py", ".js", ".ts", ".rs", ".go", ".cpp", ".java"]:
+                        extensions[ext] = extensions.get(ext, 0) + 1
+            if extensions:
+                best_ext = max(extensions, key=extensions.get)
+                mapping = {
+                    ".py": "python",
+                    ".js": "javascript",
+                    ".ts": "typescript",
+                    ".rs": "rust",
+                    ".go": "go",
+                    ".cpp": "cpp",
+                    ".java": "java"
+                }
+                settings.auto_context = mapping.get(best_ext)
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     app()

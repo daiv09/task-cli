@@ -94,7 +94,39 @@ t export tasks_backup.json
 t export tasks_backup.md --format md
 
 # Import from JSON
-t import tasks_backup.json
+t import-tasks tasks_backup.json
+```
+
+### Shell Autocomplete Setup
+Enable tab completion for task IDs and subcommands in your terminal.
+To install auto-completion configuration for your shell (supports Bash, Zsh, Fish, or PowerShell), run:
+```bash
+# Register completion for 't'
+t --install-completion
+
+# Register completion for 'task'
+task --install-completion
+```
+*Note: Restart your terminal session after running this command. You will then be able to press `TAB` to auto-complete task IDs for commands like `update`, `mark-done`, `start`, `sub`, etc.*
+
+### AI Assistant & Agentic Features (tai)
+The `tai` subcommands leverage AI models (via Groq/OpenRouter compatible endpoints) to bring intelligence directly to your workspace backlog. Make sure your `.env` contains your `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` configured.
+
+```bash
+# Break down an existing task into 3-5 subtasks using AI
+tai sub <id>
+
+# Scan your git repository status and diffs to interactively propose backlog tasks
+tai scan
+
+# Analyze completed tasks and workspace files to propose documentation updates to README.md
+tai readme
+
+# Generate release notes or PR description for tasks completed in the last N days (copied to clipboard)
+tai changelog --days 7
+
+# Run any terminal command. If it fails, AI analyzes the stderr logs and automatically registers a high-priority bug task (+bug) to your backlog!
+t run "npm test"
 ```
 
 ### Hooks & Configuration
@@ -106,3 +138,22 @@ data_path = "/absolute/path/to/tasks.json"
 default_project = "none"
 ```
 
+### Environment Variables
+The project supports loading environment variables from a `.env` file in the root directory. This allows for easy configuration of dependencies like API keys.
+
+### Testing
+The project uses pytest for testing. You can run tests using the command `pytest` in the root directory.
+
+### Dependencies
+The project uses the following dependencies:
+- typer
+- rich
+- tomli
+- pyperclip
+- httpx
+- python-dotenv
+
+Note: Make sure to install the dependencies using `pip install -e .` to ensure the project works as expected.
+
+### Contribution
+To contribute to the project, please submit a pull request with your changes. Make sure to include tests for any new functionality.

@@ -25,7 +25,7 @@ def parse_natural_date(text: str):
     for word, target_date in keywords.items():
         pattern = rf"\b{word}\b"
         if re.search(pattern, text, re.IGNORECASE):
-            iso_date = target_date.strftime("%Y-%m-%d")
+            iso_date = target_date.replace(hour=23, minute=59, second=59, microsecond=0).isoformat()
             cleaned_text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
             return cleaned_text, iso_date
 
@@ -41,7 +41,7 @@ def parse_natural_date(text: str):
             days_ahead += 7
             
         target_date = now + timedelta(days=days_ahead)
-        iso_date = target_date.strftime("%Y-%m-%d")
+        iso_date = target_date.replace(hour=23, minute=59, second=59, microsecond=0).isoformat()
         cleaned_text = re.sub(match.group(0), "", text, flags=re.IGNORECASE).strip()
         return cleaned_text, iso_date
 
