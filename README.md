@@ -1,6 +1,20 @@
 # Task CLI (Power-User Edition)
 
-A fully featured but clean CLI Task Manager written in Python. Uses a custom status nomenclature (`do`, `doing`, `done`) replacing the traditional (todo, in-progress, done). 
+A fully featured, clean, and modular CLI Task Manager written in Python. Uses a custom status nomenclature (`do`, `doing`, `done`) replacing the traditional (todo, in-progress, done).
+
+Now upgraded with robust SQLite storage, multi-level transactional undo, automated legacy data migration, and a clean modular codebase.
+
+## Features
+
+- **SQLite Database Backend**: Fast, transactional storage (`tasks.db`) with automatic schemas and migrations.
+- **Legacy Auto-Migration**: Automatically detects and safely migrates older `tasks.json` task files to SQLite on startup.
+- **3-Char Alphanumeric IDs**: Compact and easy-to-type ID space with runtime collision checks.
+- **Platformdirs Support**: Clean data storage in standard, cross-platform directories (e.g. `%LOCALAPPDATA%` on Windows, `~/.local/share` on Linux/macOS).
+- **Multi-Level Undo**: Fully transactional backup and state recovery system using `t undo`.
+- **Power-User Aliases**: Shorthand subcommands (e.g., `t a` for add, `t ls` for list).
+- **Rich Interactive Shell**: Direct, in-memory REPL shell (`t shell`) with keyboard exception handling.
+- **AI-Powered Command Extensions (`tai`)**: Subtask breakdown, git workspace scans, auto-generated documentation, and changelogs.
+- **Terminal Autocomplete**: Native shell autocompletion for subcommands and active task IDs.
 
 ## Installation
 
@@ -16,7 +30,7 @@ source venv/bin/activate
 pip install -e .
 ```
 
-This registers the commands `task` and `t`.
+This registers the global commands `task` and `t`.
 
 ## Usage & Advanced Features
 
@@ -75,6 +89,7 @@ t focus
 ```
 
 ### Task Operations
+All operations support 3-character task ID autocompletion via `TAB`.
 ```bash
 t mark-doing <id>
 t mark-done <id>   # (Triggers recurrence if configured)
@@ -82,6 +97,12 @@ t mark-do <id>
 
 t update <id> "New description +newtag"
 t delete <id>
+```
+
+### Transactional Undo
+Reverts the last modification (adds, edits, status transitions, subtasks, deletions) instantly.
+```bash
+t undo
 ```
 
 ### Stats & Integrations
@@ -94,15 +115,65 @@ t export tasks_backup.json
 t export tasks_backup.md --format md
 
 # Import from JSON
-t import tasks_backup.json
+t import-tasks tasks_backup.json
 ```
 
-### Hooks & Configuration
-- **Hooks**: You can place executables in `~/.task-cli/hooks/on-add`, `on-update`, and `on-done`. When these actions occur, the script is called with a `TASK_JSON` environment variable containing the task data.
+### Shell Autocomplete Setup
+Enable tab completion for task IDs and subcommands in your terminal.
+To install auto-completion configuration for your shell (supports Bash, Zsh, Fish, or PowerShell), run:
+```bash
+# Register completion for 't'
+t --install-completion
+
+# Register completion for 'task'
+task --install-completion
+```
+*Note: Restart your terminal session after running this command. You will then be able to press `TAB` to auto-complete task IDs for commands like `update`, `mark-done`, `start`, `sub`, etc.*
+
+### AI Assistant & Agentic Features (tai)
+The `tai` subcommands leverage AI models (via OpenAI-compatible endpoints) to bring intelligence directly to your workspace backlog. Make sure your `.env` contains your `AI_API_KEY`, `AI_BASE_URL`, and `AI_MODEL` configured.
+
+```bash
+# Break down an existing task into 3-5 subtasks using AI
+tai sub <id>
+
+# Scan your git repository status and diffs to interactively propose backlog tasks
+tai scan
+
+# Analyze completed tasks and workspace files to propose documentation updates to README.md
+tai readme
+
+# Generate release notes or PR description for tasks completed in the last N days (copied to clipboard)
+tai changelog --days 7
+
+# Run any terminal command. If it fails, AI analyzes the stderr logs and automatically registers a high-priority bug task (+bug) to your backlog!
+t run "npm test"
+```
+
+### File Locations & Configuration
+- **Database Path**: Stored cross-platform via `platformdirs`.
+  - Windows: `%LOCALAPPDATA%\task-cli\tasks.db`
+  - macOS: `~/Library/Application Support/task-cli/tasks.db`
+  - Linux: `~/.local/share/task-cli/tasks.db`
 - **Config**: You can create `~/.task-cli.toml` with:
 ```toml
 [task-cli]
-data_path = "/absolute/path/to/tasks.json"
-default_project = "none"
+default_project = "core"
+```
+- **Hooks**: Place executable scripts in `~/.task-cli/hooks/on-add`, `on-update`, and `on-done` for custom event scripting.
+
+### Testing
+The project uses `pytest` for testing. You can run the test suite using:
+```bash
+pytest
 ```
 
+### Dependencies
+The project uses the following dependencies:
+- `typer`: CLI framework
+- `rich`: Formatting and tables
+- `platformdirs`: Clean directory resolution
+- `tomli`: TOML configuration parsing
+- `pyperclip`: Clipboard integration
+- `httpx`: AI LLM requests
+- `python-dotenv`: Environment configuration

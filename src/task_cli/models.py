@@ -2,13 +2,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
-import random
-import string
-
 def generate_task_id():
-    letter = random.choice(string.ascii_lowercase)
-    numbers = random.randint(0, 99)
-    return f"{letter}{numbers:02d}"   # ensures two digits like 01, 09
+    import random
+    chars = "abcdefghjkmnpqrstuvwxyz23456789"
+    return ''.join(random.choices(chars, k=3))
 
 class TaskStatus(str, Enum):
     DO = "do"

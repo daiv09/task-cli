@@ -1,7 +1,7 @@
 # Task CLI (Power-User Edition) Cheatsheet
 
 A quick reference guide for your Typer-based task manager.
-> **Note**: Uses `do`, `doing`, and `done` statuses.
+> **Note**: Uses `do`, `doing`, and `done` statuses, SQLite storage, and 3-character alphanumeric task IDs.
 
 ## 📝 Creating Tasks (Add / `a`)
 ```bash
@@ -81,7 +81,7 @@ t stop
 t stop <id>
 ```
 
-## 🔄 Manipulating Tasks
+## 🔄 Manipulating Tasks & Undo
 ```bash
 # Change Status
 t mark-doing <id>
@@ -95,15 +95,41 @@ t update <id> "New description +newtag"
 t delete <id>
 t clear           # Deletes ALL tasks
 
-# Undo last destructive operation
+# Undo last destructive operation (fully transactional)
 t undo
 ```
 
 ## 🖥️ Interactive Mode
 ```bash
-# Start interactive task shell
+# Start interactive task shell (runs directly in-memory)
 t shell
 ```
+
+## 🤖 AI Assistant (`tai` & `t run`)
+```bash
+# Break down an existing task into 3-5 subtasks using AI
+tai sub <id>
+
+# Scan current git repository status and diffs, and suggest tasks
+tai scan
+
+# Update or generate project README.md using AI
+tai readme
+
+# Generate changelog / release notes for tasks completed in the last N days
+tai changelog --days 7
+
+# Run terminal command and auto-log a high-priority bug (+bug) on failure
+t run "<command>"
+```
+
+## ⌨️ Shell Autocomplete Setup
+To install auto-completion configuration for your shell (Bash, Zsh, Fish, or PowerShell):
+```bash
+t --install-completion
+task --install-completion
+```
+*Note: Restart your terminal session after running this command to enable TAB-completion of active 3-character task IDs.*
 
 ## 📊 Data, Config & Sync
 ```bash
@@ -119,5 +145,8 @@ t export backup.md --format md
 t import-tasks backup.json
 ```
 
-**Configuration Path**: `~/.task-cli.toml`
-**Background Hooks Path**: `~/.task-cli/hooks/on-add`, `on-update`, `on-done`
+- **Configuration Path**: `~/.task-cli.toml`
+- **Data Location**: Auto-resolved via `platformdirs`.
+  - Windows: `%LOCALAPPDATA%\task-cli\tasks.db`
+  - Linux/macOS: `~/.local/share/task-cli/tasks.db` or `~/.local/share/task-cli/history.jsonl`
+- **Background Hooks Path**: `~/.task-cli/hooks/on-add`, `on-update`, `on-done`
