@@ -2,6 +2,7 @@ import os
 import json
 import httpx
 import sys
+from typing import Optional
 from rich.console import Console
 from .config import settings
 
@@ -23,7 +24,13 @@ def get_ai_credentials():
     model = os.getenv("AI_MODEL") or os.getenv("OPENAI_MODEL") or settings.ai_model
     return api_key, base_url, model
 
-def query_llm(system_prompt: str, user_prompt: str, json_format: bool = False) -> str:
+def query_llm(
+    system_prompt: str,
+    user_prompt: Optional[str] = None,
+    json_format: bool = False,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None
+) -> str:
     """Queries the OpenAI-compatible REST endpoint using httpx synchronously with a 5-second timeout."""
     api_key, base_url, model = get_ai_credentials()
     
@@ -41,15 +48,19 @@ def query_llm(system_prompt: str, user_prompt: str, json_format: bool = False) -
         "Content-Type": "application/json"
     }
     
+    messages = [{"role": "system", "content": system_prompt}]
+    if user_prompt:
+        messages.append({"role": "user", "content": user_prompt})
+        
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "max_tokens": 4096
+        "messages": messages,
+        "max_tokens": max_tokens if max_tokens is not None else 4096
     }
     
+    if temperature is not None:
+        payload["temperature"] = temperature
+        
     if json_format:
         payload["response_format"] = {"type": "json_object"}
         

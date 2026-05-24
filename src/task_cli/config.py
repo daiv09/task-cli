@@ -1,6 +1,8 @@
 import sys
+import os
 from pathlib import Path
 from dotenv import load_dotenv
+from platformdirs import user_data_dir
 load_dotenv(override=True)
 
 # Handle toml loading for Python 3.10 vs 3.11+
@@ -13,7 +15,11 @@ VERSION = "0.1.0"
 
 class Config:
     def __init__(self):
-        self.default_file_path = Path("tasks.json")
+        env_path = os.getenv("TASK_DB_PATH")
+        if env_path:
+            self.default_file_path = Path(env_path)
+        else:
+            self.default_file_path = Path(user_data_dir("task-cli", "task-cli")) / "tasks.json"
         self.default_project = None
         self.preferred_view = "list"
         self.context = None

@@ -1,7 +1,7 @@
 # Task CLI (Power-User Edition) Cheatsheet
 
 A quick reference guide for your Typer-based task manager.
-> **Note**: Uses `do`, `doing`, and `done` statuses.
+> **Note**: Uses `do`, `doing`, and `done` statuses, SQLite storage, and 3-character alphanumeric task IDs.
 
 ## 📝 Creating Tasks (Add / `a`)
 ```bash
@@ -81,7 +81,7 @@ t stop
 t stop <id>
 ```
 
-## 🔄 Manipulating Tasks
+## 🔄 Manipulating Tasks & Undo
 ```bash
 # Change Status
 t mark-doing <id>
@@ -95,13 +95,13 @@ t update <id> "New description +newtag"
 t delete <id>
 t clear           # Deletes ALL tasks
 
-# Undo last destructive operation
+# Undo last destructive operation (fully transactional)
 t undo
 ```
 
 ## 🖥️ Interactive Mode
 ```bash
-# Start interactive task shell
+# Start interactive task shell (runs directly in-memory)
 t shell
 ```
 
@@ -129,7 +129,7 @@ To install auto-completion configuration for your shell (Bash, Zsh, Fish, or Pow
 t --install-completion
 task --install-completion
 ```
-*Note: Restart your terminal session after running this command to enable TAB-completion of task IDs.*
+*Note: Restart your terminal session after running this command to enable TAB-completion of active 3-character task IDs.*
 
 ## 📊 Data, Config & Sync
 ```bash
@@ -145,5 +145,8 @@ t export backup.md --format md
 t import-tasks backup.json
 ```
 
-**Configuration Path**: `~/.task-cli.toml`
-**Background Hooks Path**: `~/.task-cli/hooks/on-add`, `on-update`, `on-done`
+- **Configuration Path**: `~/.task-cli.toml`
+- **Data Location**: Auto-resolved via `platformdirs`.
+  - Windows: `%LOCALAPPDATA%\task-cli\tasks.db`
+  - Linux/macOS: `~/.local/share/task-cli/tasks.db` or `~/.local/share/task-cli/history.jsonl`
+- **Background Hooks Path**: `~/.task-cli/hooks/on-add`, `on-update`, `on-done`

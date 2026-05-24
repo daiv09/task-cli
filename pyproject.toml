@@ -16,7 +16,8 @@ dependencies = [
     "tomli>=2.0.1; python_version < '3.11'",
     "pyperclip>=1.8.2",
     "httpx>=0.24.0",
-    "python-dotenv>=1.0.0"
+    "python-dotenv>=1.0.0",
+    "platformdirs>=4.0.0"
 ]
 
 [project.scripts]

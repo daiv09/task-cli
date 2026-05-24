@@ -71,3 +71,21 @@ def extract_tags(description: str) -> tuple[str, list[str]]:
             clean_parts.append(word)
             
     return " ".join(clean_parts), tags
+
+import random
+
+def generate_unique_id(existing_ids: set[str], length: int = 3) -> str:
+    """
+    Generates a 3-character alphanumeric ID guaranteed not to collide
+    with any ID in the existing_ids set.
+    """
+    # Alphabet containing letters and numbers (removed 0, O, 1, l for clarity)
+    chars = "abcdefghjkmnpqrstuvwxyz23456789"
+    
+    while True:
+        # Generate a candidate ID (e.g., 'm4k')
+        candidate_id = ''.join(random.choices(chars, k=length))
+        
+        # Check against the database to ensure 100% uniqueness
+        if candidate_id not in existing_ids:
+            return candidate_id
