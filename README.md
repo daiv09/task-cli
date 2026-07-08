@@ -1,4 +1,4 @@
-# Task CLI (Power-User Edition)
+# task-cli
 
 A fully featured, clean, and modular CLI Task Manager written in Python. Uses a custom status nomenclature (`do`, `doing`, `done`) replacing the traditional (todo, in-progress, done).
 
